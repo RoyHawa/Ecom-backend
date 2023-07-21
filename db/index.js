@@ -1,3 +1,4 @@
+const { comparePasswords, passwordHash } = require("../util/password.js");
 const Pool = require("pg").Pool;
 const pool = new Pool({
   user: "postgres",
@@ -24,9 +25,10 @@ const createUser = async (firstName, lastName, email, password) => {
     if (exists) {
       throw new Error("Email already exists");
     }
+    const hashedPassword = await passwordHash(password);
     const res = await pool.query(
       'INSERT INTO "users"(firstName,lastName,email,password) VALUES($1,$2,$3,$4) RETURNING *;',
-      [firstName, lastName, email, password]
+      [firstName, lastName, email, hashedPassword]
     );
     return res.rows[0];
   } catch (error) {
@@ -47,7 +49,7 @@ const isValidUser = async (email, password) => {
     if (res.rowCount === 0) {
       return -1;
     }
-    if (res.rows[0].password === password) {
+    if (await comparePasswords(res.rows[0].password, password)) {
       return 1;
     }
     return 0;
@@ -78,33 +80,38 @@ const getCategories = async () => {
   }
 };
 
-const getCategoriesAndProducts=async ()=>{
+const getCategoriesAndProducts = async () => {
+  const categories = await getCategories();
 
-  const categories=await getCategories();
+  for (let i = 0; i < categories.length; i++) {
+    let prods = await getProductsByCategoryId(categories[i].id);
 
-  for(let i=0;i<categories.length;i++){
-    let prods=await getProductsByCategoryId(categories[i].id);
-
-    categories[i].products=prods;
+    categories[i].products = prods;
   }
   return categories;
-}
+};
 
-(async ()=>{
-  const res=await getCategoriesAndProducts(1);
-  console.log(res[0].products[0].name)
-})()
+(async () => {
+  const res = await getCategoriesAndProducts(1);
+  console.log(res[0].products[0].name);
+})();
 
-
-const getIdFromEmail=async (email)=>{
+const getIdFromEmail = async (email) => {
   try {
-    const res=await pool.query(`SELECT "id" FROM users WHERE email=$1`,[email]);
+    const res = await pool.query(`SELECT "id" FROM users WHERE email=$1`, [
+      email,
+    ]);
     return res.rows[0].id;
   } catch (error) {
     console.error(error);
   }
-}
+};
 
-
-module.exports = { createUser, isValidUser, getProductsByCategoryId, getCategories,getIdFromEmail,getCategoriesAndProducts };
-
+module.exports = {
+  createUser,
+  isValidUser,
+  getProductsByCategoryId,
+  getCategories,
+  getIdFromEmail,
+  getCategoriesAndProducts,
+};
